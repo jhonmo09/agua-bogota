@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>aliste el totumo</title>
+    <script
+      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCljOyHtuvNsHMZ4f4UWOaYkxE1K7ieaWw&libraries=geometry,places&callback=initMap"
+      async
+      defer
+    ></script>
+  </head>
+  <body>
+    <input
+      style="
+        width: 100%;
+        max-width: 300px;
+        height: 32px;
+        display: block;
+        font-size: 16px;
+      "
+      type="text"
+      id="direccion"
+      placeholder="Ingresa una dirección"
+    />
+    <button onclick="buscarInformacion()">Buscar</button>
+    <div id="info">Ingrese su dirección</div>
+    <div id="map" style="height: 400px; width: 100%"></div>
+  </body>
+
+  <script>
+    let map;
+    let polygons;
+    const center = { lat: 4.6040664887014655, lng: -74.13192083441211 };
+    let direccion_input = document.getElementById("direccion");
+
+    const defaultBounds = {
+      north: center.lat + 0.1,
+      south: center.lat - 0.1,
+      east: center.lng + 0.1,
+      west: center.lng - 0.1,
+    };
+
+    function mapDraw(data) {
+      // Crear el polígono y dibujarlo en el mapa
+      const polygon = new google.maps.Polygon({
+        paths: data,
+        strokeColor: "#FF0000",
+        strokeOpacity: 0.8,
+        strokeWeight: 2,
+        fillColor: "#FF0000",
+        fillOpacity: 0.35,
+        editable: false,
+        draggable: false,
+      });
+      polygon.setMap(map);
+    }
+
+    function drawPolygons(data) {
+      data.features.forEach((feature) => {
+        // Acceder a las coordenadas del polígono
+        const coordinates = feature.geometry.coordinates;
+        const type = feature.geometry.type;
+        const text = feature.properties.name;
+
+        // Crear un arreglo para las coordenadas del polígono
+
+        // Iterar sobre las coordenadas y agregarlas al arreglo
+        coordinates.forEach((polygon) => {
+          if (type === "MultiPolygon") {
+            polygon.forEach((point) => {
+              const polygonCoords = [];
+              point.forEach((inner_point) => {
+                polygonCoords.push({
+                  lat: inner_point[1],
+                  lng: inner_point[0],
+                });
+              });
+              mapDraw(polygonCoords);
+            });
+          } else {
+            const polygonCoords = [];
+            polygon.forEach((point) => {
+              polygonCoords.push({ lat: point[1], lng: point[0] });
+            });
+            mapDraw(polygonCoords);
+          }
+        });
+      });
+    }
+
+    function initMap() {
+      map = new google.maps.Map(document.getElementById("map"), {
+        center: center,
+        zoom: 12,
+      });
+
+      // Cargar polígonos desde el JSON
+      cargarPoligonos();
+
+      const options = {
+        bounds: defaultBounds,
+        componentRestrictions: { country: "co" },
+        fields: ["address_components", "geometry", "icon", "name"],
+        strictBounds: false,
+      };
+
+      const autocomplete = new google.maps.places.Autocomplete(
+        direccion_input,
+        options
+      );
+    }
+
+    function cargarPoligonos() {
+      fetch("map.json")
+        .then((response) => response.json()) // Convertir la respuesta a JSON
+        .then((data) => {
+          polygons = data;
+
+          drawPolygons(data);
+        })
+        .catch((error) =>
+          console.error("Hubo un problema al cargar el JSON:", error)
+        );
+    }
+
+    function buscarInformacion() {
+      let direccion = direccion_input.value;
+
+      let geocoder = new google.maps.Geocoder();
+      geocoder.geocode({ address: direccion }, function (results, status) {
+        console.log("status", status);
+        if (status == google.maps.GeocoderStatus.OK) {
+          let location = results[0].geometry.location;
+          let isInsidePolygon = false;
+
+          fetch("map.json")
+            .then((response) => response.json()) // Convertir la respuesta a JSON
+            .then((data) => {
+              data.features.forEach((feature) => {
+                // Acceder a las coordenadas del polígono
+                const coordinates = feature.geometry.coordinates;
+                const type = feature.geometry.type;
+                const text = feature.properties.name;
+
+                // Crear un arreglo para las coordenadas del polígono
+
+                // Iterar sobre las coordenadas y agregarlas al arreglo
+                coordinates.forEach((polygon) => {
+                  if (type === "MultiPolygon") {
+                    polygon.forEach((point) => {
+                      const polygonCoords = [];
+                      point.forEach((inner_point) => {
+                        polygonCoords.push({
+                          lat: inner_point[1],
+                          lng: inner_point[0],
+                        });
+                      });
+                      if (
+                        google.maps.geometry.poly.containsLocation(
+                          location,
+                          new google.maps.Polygon({
+                            paths: polygonCoords,
+                          })
+                        )
+                      ) {
+                        isInsidePolygon = true;
+                        map.setCenter(location);
+                        map.setZoom(16);
+                        console.log(
+                          "La dirección está dentro del polígono:",
+                          text
+                        );
+                        document.getElementById(
+                          "info"
+                        ).innerHTML = `aliste el totumo para el ${text}`;
+                        // Aquí puedes realizar operaciones adicionales, como mostrar información asociada al polígono.
+                      }
+                    });
+                  } else {
+                    const polygonCoords = [];
+                    polygon.forEach((point) => {
+                      polygonCoords.push({ lat: point[1], lng: point[0] });
+                    });
+                    if (
+                      google.maps.geometry.poly.containsLocation(
+                        location,
+                        new google.maps.Polygon({
+                          paths: polygonCoords,
+                        })
+                      )
+                    ) {
+                      isInsidePolygon = true;
+                      map.setCenter(location);
+                      map.setZoom(16);
+                      console.log(text);
+                      document.getElementById(
+                        "info"
+                      ).innerHTML = `aliste el totumo para el ${text}`;
+                      // Aquí puedes realizar operaciones adicionales, como mostrar información asociada al polígono.
+                    }
+                  }
+                });
+              });
+              if (!isInsidePolygon) {
+                console.log("La dirección no está dentro de ninguna zona.");
+                // Aquí puedes manejar el caso en que la dirección no esté dentro de ninguna zona.
+                document.getElementById(
+                  "info"
+                ).innerHTML = `La dirección no está dentro de ninguna zona.`;
+              }
+            })
+            .catch((error) =>
+              console.error("Hubo un problema al cargar el JSON:", error)
+            );
+        } else {
+          console.error("Error al geocodificar la dirección:", status);
+        }
+      });
+    }
+  </script>
+</html>
